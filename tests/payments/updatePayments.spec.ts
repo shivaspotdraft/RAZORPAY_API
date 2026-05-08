@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures/context'
 import { paymentData, paymentErrors, updatePaymentNotes } from '../../test-data/testData'
-
+import { paymentsScehma } from '../../schemas/paymentsSchema'
 test.describe.configure({ mode: 'serial' })
 
 test('should update a payment with valid notes', async ({ apictx }) => {
@@ -10,6 +10,8 @@ test('should update a payment with valid notes', async ({ apictx }) => {
 
   expect(updatePaymentResponse).toBeOK()
   const updatedPayment = await updatePaymentResponse.json()
+  const result= paymentsScehma.safeParse(updatedPayment)
+  expect(result.success).toBe(true)
   expect(updatedPayment.id).toBe(paymentData.id)
   expect(updatedPayment.notes.notes_key_1).toBe(updatePaymentNotes.notes.notes_key_1)
   expect(updatedPayment.notes.notes_key_2).toBe(updatePaymentNotes.notes.notes_key_2)

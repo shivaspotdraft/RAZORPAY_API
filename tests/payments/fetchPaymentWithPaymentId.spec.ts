@@ -1,10 +1,12 @@
 import { test, expect } from '../../fixtures/context'
 import { paymentData, paymentErrors } from '../../test-data/testData'
-
+import { paymentsScehma } from '../../schemas/paymentsSchema'
 test('should fetch a payment by valid ID', async ({ apictx }) => {
   const fetchPaymentResponse = await apictx.get(`/v1/payments/${paymentData.id}`)
   expect(fetchPaymentResponse).toBeOK()
   const fetchedPayment = await fetchPaymentResponse.json()
+  const result= paymentsScehma.safeParse(fetchedPayment)
+  expect(result.success).toBe(true)
   expect(fetchedPayment.id).toBe(paymentData.id)
   expect(fetchedPayment.amount).toBe(paymentData.amount)
   expect(fetchedPayment.method).toBe(paymentData.method)
