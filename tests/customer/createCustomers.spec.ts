@@ -1,11 +1,16 @@
 import { test, expect } from '../../fixtures/context'
 import { createCustomer } from '../../helper/createCustomer'
 import { customerDetails, customerErrors, invalidCustomerEmail } from '../../test-data/testData'
+import { customerResponseSchema } from '../../schemas/customerSchema'
 
 test('should create a customer with valid data', async ({ apictx }) => {
   const createCustomerResponse = await createCustomer(apictx, customerDetails)
   expect(createCustomerResponse).toBeOK()
   const createdCustomer = await createCustomerResponse.json()
+
+  const result = customerResponseSchema.safeParse(createdCustomer)
+  expect(result.success).toBe(true)
+
   expect(createdCustomer.id).toBeTruthy()
   expect(createdCustomer.name).toBe(customerDetails.name)
   expect(createdCustomer.email).toBe(customerDetails.email)
@@ -30,7 +35,6 @@ test("should return 400 when creating a duplicate customer with fail_existing se
     ...customerDetails,
     fail_existing: '1'
   }
-
   const createDuplicateResponse = await createCustomer(apictx, customerWithFailExisting)
   const errorBody = await createDuplicateResponse.json()
   expect(createDuplicateResponse.status()).toBe(400)
@@ -51,8 +55,14 @@ test("should return existing customer when creating duplicate with fail_existing
   expect(firstCreateResponse).toBeOK()
   const firstCreatedCustomer = await firstCreateResponse.json()
 
+  const result1 = customerResponseSchema.safeParse(firstCreatedCustomer)
+  expect(result1.success).toBe(true)
+
   const duplicateCreateResponse = await createCustomer(apictx, uniqueCustomer)
   const duplicateCreatedCustomer = await duplicateCreateResponse.json()
+
+  const result2 = customerResponseSchema.safeParse(duplicateCreatedCustomer)
+  expect(result2.success).toBe(true)
 
   expect(duplicateCreateResponse).toBeOK()
   expect(duplicateCreatedCustomer).toBeTruthy()

@@ -1,6 +1,7 @@
 import { test, expect } from '../../fixtures/context'
 import { createCustomer } from '../../helper/createCustomer'
 import { customerDetails, customerErrors, fetchCustomersData } from '../../test-data/testData'
+import { customerResponseSchema } from '../../schemas/customerSchema'
 
 test('should fetch all customers successfully', async ({ apictx }) => {
   const fetchAllResponse = await apictx.get('/v1/customers')
@@ -43,12 +44,16 @@ test('should fetch a customer by ID', async ({ apictx }) => {
   const createCustomerResponse = await createCustomer(apictx, customerDetails)
   expect(createCustomerResponse).toBeOK()
   const createdCustomer = await createCustomerResponse.json()
+  const result= customerResponseSchema.safeParse(createdCustomer)
+  expect(result.success).toBe(true)
   expect(createdCustomer.id).toBeTruthy()
   const customerId = createdCustomer.id
 
   const fetchCustomerResponse = await apictx.get(`/v1/customers/${customerId}`)
   expect(fetchCustomerResponse).toBeOK()
   const fetchedCustomer = await fetchCustomerResponse.json()
+  const editedResultesult= customerResponseSchema.safeParse(createdCustomer)
+  expect(editedResultesult.success).toBe(true)
   expect(fetchedCustomer.id).toBe(createdCustomer.id)
   expect(fetchedCustomer.name).toBe(createdCustomer.name)
 })
