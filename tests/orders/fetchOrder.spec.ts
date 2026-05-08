@@ -1,7 +1,7 @@
 import { test, expect } from '../../fixtures/context'
 import { createOrder } from '../../helper/createorder'
 import { fetchOrdersData, orderDetails, orderErrors } from '../../test-data/testData'
-
+import { orderSchema } from '../../schemas/ordersSchema'
 test('should fetch all orders with a valid count', async ({ apictx }) => {
   const fetchOrdersResponse = await apictx.get('/v1/orders', {
     params: {
@@ -43,6 +43,8 @@ test('should return 400 when fetching orders with count above the maximum', asyn
 test('should fetch an order by ID', async ({ apictx }) => {
   const createOrderResponse = await createOrder(apictx, orderDetails)
   const createdOrder = await createOrderResponse.json()
+  const result= orderSchema.safeParse(createdOrder)
+  expect(result.success).toBe(true)
   const orderId = createdOrder.id
 
   const fetchOrderResponse = await apictx.get(`/v1/orders/${orderId}`)

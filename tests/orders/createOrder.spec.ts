@@ -1,12 +1,13 @@
 import { test, expect } from '../../fixtures/context'
 import { createOrder } from '../../helper/createorder'
 import { orderAmountLimits, orderDetails, orderErrors } from '../../test-data/testData'
-
+import { orderSchema } from '../../schemas/ordersSchema'
 test('should create an order with valid data', async ({ apictx }) => {
   const createOrderResponse = await createOrder(apictx, orderDetails)
   expect(createOrderResponse).toBeOK()
   const createdOrder = await createOrderResponse.json()
-  expect(createdOrder).toBeTruthy()
+  const result= orderSchema.safeParse(createdOrder)
+  expect(result.success).toBe(true)
   expect(createdOrder.amount).toBe(orderDetails.amount)
   expect(createdOrder.currency).toBe(orderDetails.currency)
   expect(createdOrder.id).toBeTruthy()

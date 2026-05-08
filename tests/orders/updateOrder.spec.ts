@@ -1,11 +1,13 @@
 import { test, expect } from '../../fixtures/context'
 import { createOrder } from '../../helper/createorder'
 import { invalidOrderUpdate, orderDetails, orderErrors, updateOrderNotes } from '../../test-data/testData'
-
+import { orderSchema } from '../../schemas/ordersSchema'
 test('should update an order with valid data', async ({ apictx }) => {
   const createOrderResponse = await createOrder(apictx, orderDetails)
   expect(createOrderResponse).toBeOK()
   const createdOrder = await createOrderResponse.json()
+  const result= orderSchema.safeParse(createdOrder)
+  expect(result.success).toBe(true)
   const orderId = createdOrder.id
 
   const updateOrderResponse = await apictx.patch(`/v1/orders/${orderId}`, {
