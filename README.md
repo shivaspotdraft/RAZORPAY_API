@@ -1,6 +1,6 @@
 # Razorpay API Tests
 
-Comprehensive **API test automation suite** for the Razorpay REST APIs, built with [Playwright Test](https://playwright.dev/) and TypeScript. The suite covers the **Customers**, **Orders**, and **Payments** resources against Razorpay's public sandbox (`https://api.razorpay.com`) and is wired up with **Allure** for rich HTML reports and **GitHub Actions** for CI.
+Comprehensive **API test automation suite** for the Razorpay REST APIs, built with [Playwright Test](https://playwright.dev/) and TypeScript. The suite covers the **Customers**, **Orders**, and **Payments** resources against Razorpay's public sandbox (`https://api.razorpay.com`) and is wired up with **Zod** schema validation, **Allure** for rich HTML reports, **Docker** for portable execution, and **GitHub Actions** for CI.
 
 ---
 
@@ -11,12 +11,13 @@ Comprehensive **API test automation suite** for the Razorpay REST APIs, built wi
 3. [Prerequisites](#prerequisites)
 4. [Setup](#setup)
 5. [Running the tests](#running-the-tests)
-6. [Reports](#reports)
-7. [Test coverage](#test-coverage)
-8. [How it works](#how-it-works)
-9. [Adding a new test](#adding-a-new-test)
-10. [Continuous integration](#continuous-integration)
-11. [Troubleshooting](#troubleshooting)
+6. [Running with Docker](#running-with-docker)
+7. [Reports](#reports)
+8. [Test coverage](#test-coverage)
+9. [How it works](#how-it-works)
+10. [Adding a new test](#adding-a-new-test)
+11. [Continuous integration](#continuous-integration)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -25,10 +26,12 @@ Comprehensive **API test automation suite** for the Razorpay REST APIs, built wi
 - **Pure API tests** — no browser automation; fast and deterministic.
 - **TypeScript-first** with Playwright's typed `APIRequestContext`.
 - **Custom fixture** that injects an authenticated request context into every test (`apictx`).
+- **Schema validation with Zod** — every successful response is parsed against a Zod schema to catch contract drift (`schemas/`).
 - **Centralised test data and error strings** in `test-data/testData.ts` — change a value once, every test that depends on it stays in sync.
 - **Centralised helpers** for repeated setup (creating customers / orders).
 - **Two reporters out of the box**: the default Playwright HTML report and Allure.
-- **CI pipeline** runs the full suite on every push/PR via GitHub Actions.
+- **Dockerfile** included so the suite can be run anywhere with `docker build && docker run`.
+- **CI pipeline** runs the full suite on every push/PR via GitHub Actions, with secrets injected at runtime.
 
 ---
 
@@ -36,20 +39,26 @@ Comprehensive **API test automation suite** for the Razorpay REST APIs, built wi
 
 ```
 razorpay_api/
-├── .env                  # Local secrets (Test_Key_ID, Test_Key_Secret, Base_URL)
+├── .dockerignore             # Excludes node_modules, .env, reports from Docker build context
+├── .env                      # Local secrets (Test_Key_ID, Test_Key_Secret, Base_URL) — gitignored
 ├── .github/workflows/
-│   └── playwright.yml    # CI pipeline
-├── checkout.html         # Local-only Razorpay Checkout page (gitignored)
+│   └── playwright.yml        # CI pipeline (GitHub Actions)
+├── checkout.html             # Local-only Razorpay Checkout page (gitignored)
+├── dockerfile                # Image based on mcr.microsoft.com/playwright
 ├── fixtures/
-│   └── context.ts        # Custom Playwright fixture: authenticated `apictx`
+│   └── context.ts            # Custom Playwright fixture: authenticated `apictx`
 ├── helper/
-│   ├── createCustomer.ts # POST /v1/customers helper
-│   └── createorder.ts    # POST /v1/orders helper
+│   ├── createCustomer.ts     # POST /v1/customers helper
+│   └── createorder.ts        # POST /v1/orders helper
+├── schemas/
+│   ├── customerSchema.ts     # Zod schema for the Customer entity
+│   ├── ordersSchema.ts       # Zod schema for the Order entity
+│   └── paymentsSchema.ts     # Zod schema for the Payment entity
 ├── test-data/
-│   └── testData.ts       # All static payloads, expected values, error strings
+│   └── testData.ts           # All static payloads, expected values, error strings
 ├── tests/
 │   ├── customer/
-│   │   ├── customers.spec.ts
+│   │   ├── createCustomers.spec.ts
 │   │   ├── editCustomerDetails.spec.ts
 │   │   └── fetchCustomers.spec.ts
 │   ├── orders/
@@ -61,7 +70,7 @@ razorpay_api/
 │       ├── fetchPaymentWithOrderId.spec.ts
 │       ├── fetchPaymentWithPaymentId.spec.ts
 │       └── updatePayments.spec.ts
-├── playwright.config.ts  # Playwright configuration
+├── playwright.config.ts      # Playwright configuration
 └── package.json
 ```
 
@@ -71,6 +80,7 @@ razorpay_api/
 | ------------- | ------------------------------------------------------------------------------------------------ |
 | `fixtures/`   | Reusable Playwright fixtures. The `apictx` fixture builds a Basic-auth'd `APIRequestContext`.    |
 | `helper/`     | Thin wrappers over commonly used endpoints (e.g. creating a customer, creating an order).        |
+| `schemas/`    | Zod schemas asserting the shape of Customer, Order, and Payment responses.                       |
 | `test-data/`  | Single source of truth for request payloads, expected values, and error message strings.         |
 | `tests/`      | Spec files grouped by API resource (`customer`, `orders`, `payments`).                           |
 
@@ -81,6 +91,7 @@ razorpay_api/
 - **Node.js** 18+ (any LTS works; CI uses `lts/*`).
 - **npm** 9+ (ships with Node).
 - A **Razorpay Test Mode** account — sign up at <https://dashboard.razorpay.com> and grab a **Key ID** and **Key Secret** from *Account & Settings → API Keys*.
+- (Optional) **Docker** if you want to run the suite in a container.
 - (Optional) **Allure CLI** if you want to view Allure reports locally:
   - `brew install allure` on macOS, or
   - `npm i -g allure-commandline`.
@@ -128,6 +139,40 @@ Useful flags:
 
 ---
 
+## Running with Docker
+
+The repo ships with a `dockerfile` based on the official `mcr.microsoft.com/playwright:v1.59.1-jammy` image, which already has all browser binaries and system libraries preinstalled.
+
+Build the image:
+
+```bash
+docker build -t razorpay-api-tests .
+```
+
+Run the suite, passing your sandbox credentials in at runtime:
+
+```bash
+docker run --rm \
+  -e Test_Key_ID=rzp_test_xxxxxxxxxxxxxx \
+  -e Test_Key_Secret=xxxxxxxxxxxxxxxxxxxxxxxx \
+  -e Base_URL=https://api.razorpay.com \
+  razorpay-api-tests
+```
+
+Mount a host directory if you want the reports persisted outside the container:
+
+```bash
+docker run --rm \
+  -e Test_Key_ID=... -e Test_Key_Secret=... -e Base_URL=https://api.razorpay.com \
+  -v "$(pwd)/playwright-report:/app/playwright-report" \
+  -v "$(pwd)/allure-results:/app/allure-results" \
+  razorpay-api-tests
+```
+
+> `.dockerignore` excludes `node_modules`, `.env`, and all generated report directories from the build context, so secrets never end up baked into the image.
+
+---
+
 ## Reports
 
 ### Playwright HTML report
@@ -164,7 +209,7 @@ Both `allure-results/`, `allure-report/`, `playwright-report/`, `test-results/`,
 
 | Spec                          | Scenarios                                                                                                            |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `customers.spec.ts`           | Create with valid data, create with invalid email, create duplicate with `fail_existing: '1'` and with `'0'`.        |
+| `createCustomers.spec.ts`     | Create with valid data, create with invalid email, create duplicate with `fail_existing: '1'` and with `'0'`.        |
 | `fetchCustomers.spec.ts`      | Fetch all, fetch with `count`, fetch with negative count (400), fetch by ID.                                         |
 | `editCustomerDetails.spec.ts` | Update an existing customer's name and email via `PUT /v1/customers/:id`.                                            |
 
@@ -215,6 +260,21 @@ Internally it:
 
 `helper/createCustomer.ts` and `helper/createorder.ts` are thin POST wrappers used by tests that need to set up an entity first (e.g. "fetch customer by ID" needs a customer to exist).
 
+### Schema validation with Zod
+
+`schemas/` contains a Zod schema per resource:
+
+- `customerSchema.ts` — asserts the `id` starts with `cust_`, plus nullable `name`/`email`/`contact`. Uses `.loose()` so Razorpay can add new fields without breaking tests.
+- `ordersSchema.ts` — asserts `id` starts with `order_`, a positive numeric `amount`, plus `currency`, `status`, and a nullable `receipt`.
+- `paymentsSchema.ts` — asserts `id` starts with `pay_`, a positive `amount`, a `method`, and a `status` enum (`created | authorized | captured | refunded | failed`).
+
+Specs validate every successful response with `safeParse` so contract drift (e.g. a field disappearing or changing type) shows up as a test failure rather than a runtime crash later:
+
+```ts
+const result = customerResponseSchema.safeParse(createdCustomer)
+expect(result.success).toBe(true)
+```
+
 ### Centralised test data
 
 `test-data/testData.ts` exports:
@@ -242,19 +302,25 @@ Specs assert against these constants instead of inline magic strings, so when Ra
    ```
 3. **Pull static data and error strings from `test-data/testData.ts`.** If you need a new value, add it there first.
 4. **Use helpers** (`createCustomer`, `createOrder`) when a test needs setup data — don't duplicate POST calls.
-5. **Name the test** using `should <behaviour> when <condition>`.
-6. **Use descriptive variable names** for responses and parsed bodies (e.g. `createOrderResponse`, `createdOrder`, `errorBody`).
+5. **Validate successful responses with the Zod schema** from `schemas/` (or add a new schema if the resource doesn't have one yet).
+6. **Name the test** using `should <behaviour> when <condition>`.
+7. **Use descriptive variable names** for responses and parsed bodies (e.g. `createOrderResponse`, `createdOrder`, `errorBody`).
 
 Skeleton:
 
 ```ts
 import { test, expect } from '../../fixtures/context'
 import { customerDetails, customerErrors } from '../../test-data/testData'
+import { customerResponseSchema } from '../../schemas/customerSchema'
 
 test('should ... when ...', async ({ apictx }) => {
   const response = await apictx.get('/v1/...')
   expect(response).toBeOK()
   const body = await response.json()
+
+  const result = customerResponseSchema.safeParse(body)
+  expect(result.success).toBe(true)
+
   expect(body.someField).toBe(customerDetails.someField)
 })
 ```
@@ -269,19 +335,18 @@ test('should ... when ...', async ({ apictx }) => {
 2. Set up Node (`actions/setup-node@v4`, `lts/*`).
 3. `npm ci`.
 4. `npx playwright install --with-deps`.
-5. `npx playwright test`.
+5. `npx playwright test`, with `Test_Key_ID`, `Test_Key_Secret`, and `Base_URL` injected from GitHub Actions secrets.
 6. Upload `playwright-report/` as an artifact (retained for 30 days).
 
-> **CI note:** the workflow does **not** currently set the `Test_Key_ID` / `Test_Key_Secret` / `Base_URL` env vars. Before enabling CI for a real run, add these as **GitHub repository secrets** and inject them in the workflow:
->
-> ```yaml
->     - name: Run Playwright tests
->       env:
->         Test_Key_ID:    ${{ secrets.RAZORPAY_TEST_KEY_ID }}
->         Test_Key_Secret: ${{ secrets.RAZORPAY_TEST_KEY_SECRET }}
->         Base_URL:        https://api.razorpay.com
->       run: npx playwright test
-> ```
+The workflow expects three repository secrets:
+
+| Secret             | Maps to env var    | Example value                                |
+| ------------------ | ------------------ | -------------------------------------------- |
+| `TEST_KEY_ID`      | `Test_Key_ID`      | `rzp_test_xxxxxxxxxxxxxx`                    |
+| `TEST_KEY_SECRET`  | `Test_Key_Secret`  | `xxxxxxxxxxxxxxxxxxxxxxxx`                   |
+| `BASE_URL`         | `Base_URL`         | `https://api.razorpay.com`                   |
+
+Add them under *Settings → Secrets and variables → Actions* in GitHub, then re-run the workflow.
 
 ---
 
@@ -291,9 +356,11 @@ test('should ... when ...', async ({ apictx }) => {
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Base_URL is not defined in the .env file`                    | Create / edit `.env` and add `Base_URL=https://api.razorpay.com`.                                                                                             |
 | `401 Unauthorized` on every request                           | `Test_Key_ID` / `Test_Key_Secret` are missing or wrong. Regenerate from the Razorpay dashboard.                                                               |
+| A test fails on `result.success` (Zod `safeParse`)            | Razorpay changed the response shape, or you hit a different resource than expected. Inspect `result.error` from the schema parse to see exactly which field drifted. |
 | Duplicate-customer test returns a different existing customer | The sandbox already has multiple customers with that email/contact pair. The duplicate test now generates unique values per run; if you copied the older logic, do the same. |
 | `allure: command not found` from `npm run report`             | Install Allure (`brew install allure`) or switch the script to use `npx allure ...` (see the Allure section).                                                 |
 | Playwright complains about missing browsers                   | Run `npx playwright install` (or `npx playwright install --with-deps` on Linux/CI).                                                                           |
+| Docker run fails with `Base_URL is not defined`               | Pass credentials in via `-e` flags or `--env-file .env` — they are intentionally **not** baked into the image.                                                |
 
 ---
 
